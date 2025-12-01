@@ -1,0 +1,222 @@
+"""
+NYC Airbnb Analysis
+
+This script loads NYC Airbnb data and answers key business questions:
+1. What are the most popular neighborhoods?
+2. What is the most common listing size (number of bedrooms)?
+3. Which listing generates the highest estimated revenue over the calendar period?
+
+Results from this script can be summarized in the project README.
+"""
+
+from pathlib import Path
+from typing import Tuple
+
+import pandas as pd
+
+
+# ------------------------------
+# Configuration
+# ------------------------------
+
+# Path to the main Excel file (relative to project root)
+DATA_PATH = Path("data") / "NYCBNBDATASET.xlsx"
+
+LISTINGS_SHEET_NAME = "listings"
+CALENDAR_SHEET_NAME = "calendar"
+
+
+# ------------------------------
+# Data loading and cleaning
+# ------------------------------
+
+def load_data(data_path: Path) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Load listings and calendar data from the Excel file.
+
+    :param data_path: Path to the NYCBNBDATASET.xlsx file.
+    :return: (listings_df, calendar_df)
+    """
+    if not data_path.exists():
+        raise FileNotFoundError(f"Data file not found at {data_path.resolve()}")
+
+    listings = pd.read_excel(data_path, sheet_name=LISTINGS_SHEET_NAME)
+    calendar = pd.read_excel(data_path, sheet_name=CALENDAR_SHEET_NAME)
+
+    return listings, calendar
+
+
+def clean_listings(listings: pd.DataFrame) -> pd.DataFrame:
+    """
+    Basic cleaning for listings data.
+
+    - Keeps only columns needed for this analysis.
+    - Drops obvious duplicates.
+    """
+    required_columns = [
+        "id",
+        "name",
+        "neighborhood",
+        "neighborhood_group",
+        "bedrooms",
+        "number_of_reviews",
+        "price",
+    ]
+
+    # Keep only columns that exist (in case the dataset changes slightly)
+    existing_columns = [col for col in required_columns if col in listings.columns]
+    listings = listings[existing_columns].copy()
+
+    # Remove duplicate listing IDs
+    listings = listings.drop_duplicates(subset="id")
+
+    return listings
+
+
+def clean_calendar(calendar: pd.DataFrame) -> pd.DataFrame:
+    """
+    Basic cleaning for calendar data.
+
+    - Ensures price is numeric.
+    - Keeps only useful columns for revenue calculation.
+    """
+    required_columns = ["listing_id", "date", "available", "price"]
+    existing_columns = [col for col in required_columns if col in calendar.columns]
+    calendar = calendar[existing_columns].copy()
+
+    # Convert price to numeric (remove dollar signs/commas if necessary)
+    calendar["price"] = (
+        calendar["price"]
+        .astype(str)
+        .str.replace(r"[^0-9.]", "", regex=True)
+    )
+    calendar["price"] = pd.to_numeric(calendar["price"], errors="coerce")
+
+    return calendar
+
+
+# ------------------------------
+# Analysis functions
+# ------------------------------
+
+def get_top_neighborhoods(listings: pd.DataFrame, top_n: int = 5) -> pd.Series:
+    """
+    Return the top N neighborhoods by number of listings.
+    """
+    if "neighborhood" not in listings.columns:
+        raise KeyError("Column 'neighborhood' not found in listings data.")
+
+    counts = (
+        listings
+        .groupby("neighborhood")["id"]
+        .count()
+        .sort_values(ascending=False)
+        .head(top_n)
+    )
+    return counts
+
+
+def get_most_common_bedroom_sizes(listings: pd.DataFrame, top_n: int = 5) -> pd.Series:
+    """
+    Return the most common bedroom counts across listings.
+    """
+    if "bedrooms" not in listings.columns:
+        raise KeyError("Column 'bedrooms' not found in listings data.")
+
+    counts = (
+        listings
+        .groupby("bedrooms")["id"]
+        .count()
+        .sort_values(ascending=False)
+        .head(top_n)
+    )
+    return counts
+
+
+def get_top_revenue_listings(
+    listings: pd.DataFrame,
+    calendar: pd.DataFrame,
+    top_n: int = 5,
+) -> pd.DataFrame:
+    """
+    Estimate total revenue per listing over the calendar period
+    and return the top N listings by revenue.
+
+    Assumption:
+    - Days where available == 'f' are booked.
+    - Revenue per booked day = price for that day.
+    """
+    if "listing_id" not in calendar.columns or "available" not in calendar.columns:
+        raise KeyError("Calendar data must contain 'listing_id' and 'available' columns.")
+
+    # Keep only booked days
+    booked_days = calendar[calendar["available"] == "f"].copy()
+
+    # Sum revenue per listing
+    revenue_by_listing = (
+        booked_days
+        .groupby("listing_id")["price"]
+        .sum()
+        .rename("total_revenue")
+    )
+
+    # Join revenue back to listings info
+    merged = listings.merge(
+        revenue_by_listing,
+        how="left",
+        left_on="id",
+        right_on="listing_id",
+    )
+
+    merged["total_revenue"] = merged["total_revenue"].fillna(0)
+
+    top_revenue = (
+        merged
+        .sort_values("total_revenue", ascending=False)
+        .head(top_n)
+        [["id", "name", "neighborhood", "neighborhood_group", "bedrooms", "total_revenue"]]
+    )
+
+    return top_revenue
+
+
+# ------------------------------
+# Main script
+# ------------------------------
+
+def main() -> None:
+    """
+    Orchestrates the NYC Airbnb analysis and prints results.
+    """
+    print("Loading data...")
+    listings, calendar = load_data(DATA_PATH)
+
+    print("Cleaning data...")
+    listings = clean_listings(listings)
+    calendar = clean_calendar(calendar)
+
+    print("\n1) Most popular neighborhoods (by number of listings):")
+    top_neighborhoods = get_top_neighborhoods(listings, top_n=5)
+    print(top_neighborhoods)
+
+    print("\n2) Most common listing sizes (by bedrooms):")
+    bedroom_sizes = get_most_common_bedroom_sizes(listings, top_n=5)
+    print(bedroom_sizes)
+
+    print("\n3) Top listings by estimated total revenue:")
+    top_revenue_listings = get_top_revenue_listings(listings, calendar, top_n=5)
+    print(top_revenue_listings.to_string(index=False))
+
+    # You can also export results to CSV if you want to reference them from Excel/README
+    output_dir = Path("outputs")
+    output_dir.mkdir(exist_ok=True)
+
+    top_neighborhoods.to_csv(output_dir / "top_neighborhoods.csv")
+    bedroom_sizes.to_csv(output_dir / "top_bedroom_sizes.csv")
+    top_revenue_listings.to_csv(output_dir / "top_revenue_listings.csv", index=False)
+
+    print(f"\nResults saved to: {output_dir.resolve()}")
+
+
+if __name__ == "__main__":
+    main()
