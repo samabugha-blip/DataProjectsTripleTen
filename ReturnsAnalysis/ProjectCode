@@ -1,0 +1,59 @@
+---
+
+# ✅ **PROJECT CODE (copy/paste into ReturnsAnalysis/data_prep.sql)**
+
+```sql
+-- ================================================
+-- Data Preparation for Returns Analysis Dashboard
+-- ================================================
+
+-- 1. Join Orders and Returns by order_id
+SELECT
+    o.order_id,
+    o.order_date,
+    o.ship_date,
+    o.customer_id,
+    o.product_id,
+    o.category,
+    o.sub_category,
+    o.state,
+    o.region,
+    o.sales,
+    o.quantity,
+    o.profit,
+    CASE 
+        WHEN r.order_id IS NOT NULL THEN 1
+        ELSE 0
+    END AS is_returned
+FROM orders o
+LEFT JOIN returns r
+    ON o.order_id = r.order_id;
+
+
+-- ================================================
+-- 2. Calculate Return Rate by Category and Month
+-- ================================================
+
+WITH order_returns AS (
+    SELECT
+        o.order_id,
+        o.category,
+        DATE_TRUNC('month', o.order_date) AS month,
+        CASE 
+            WHEN r.order_id IS NOT NULL THEN 1
+            ELSE 0
+        END AS is_returned
+    FROM orders o
+    LEFT JOIN returns r
+        ON o.order_id = r.order_id
+)
+
+SELECT
+    category,
+    month,
+    COUNT(*) AS total_orders,
+    SUM(is_returned) AS returned_orders,
+    ROUND((SUM(is_returned)::decimal / COUNT(*)) * 100, 2) AS return_rate_pct
+FROM order_returns
+GROUP BY category, month
+ORDER BY month, category;
