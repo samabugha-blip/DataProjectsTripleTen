@@ -1,0 +1,18 @@
+# 📐 DAX Project Code — Shopify App Success Analysis
+
+This document contains all DAX measures, calculated columns, and KPIs used (or typically used) to build a full analytical dashboard for Shopify app success.  
+These formulas were designed for the dataset contained in **shopify.xlsx**, including:
+
+- apps  
+- reviews  
+- categories  
+- apps_categories (mapping table)  
+
+---
+
+# 🧮 1. CORE REVIEW METRICS
+
+## ⭐ Average Rating
+```DAX
+Average Rating =
+AVERAGE ( reviews[rating] )
