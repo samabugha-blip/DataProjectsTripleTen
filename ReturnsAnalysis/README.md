@@ -36,5 +36,6 @@ Product returns are costly and disrupt operations. This analysis helps answer:
 ## 3. Project Screenshots
 
 
-### 🖥️ Dashboard Preview  
-*(To add images on GitHub, drag screenshots into the repo’s ReturnsAnalysis folder and link them like below)*
+### 🖥️ Dashboard Preview 
+
+<img width="993" height="672" alt="Screenshot 2025-12-01 at 8 03 41 PM" src="https://github.com/user-attachments/assets/dd145a1c-e0c8-4c8e-938e-03909b64c465" />
